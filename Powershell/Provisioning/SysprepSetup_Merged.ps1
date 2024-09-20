@@ -8,7 +8,7 @@
 .NOTES
     Author: Sammy Kastanja
     Date: 09-09-2024
-    Version: 3.8.1
+    Version: 3.8.2
     Requires: Administrative privileges
 #>
 
@@ -17,14 +17,14 @@ param (
     [string]$Method = ""
 )
 
-$SCRIPT_VERSION = "3.8.1"
+$SCRIPT_VERSION = "3.8.2"
 $ASCII_LOGO = @"
        _____            _       __   ____             __
       / ___/____  _____(_)___ _/ /  / __ \___  ____ _/ /
       \__ \/ __ \/ ___/ / __  / /  / / / / _ \/ __  / /
      ___/ / /_/ / /__/ / /_/ / /  / /_/ /  __/ /_/ / /  
     /____/\____/\___/_/\__,_/_/  /_____/\___/\__,_/_/   
-       
+    
         Device Setup Script V$SCRIPT_VERSION by Sammy Kastanja
 
 "@
@@ -40,7 +40,12 @@ $ninjaInstaller_Offline = if ($sourcePath) { Join-Path -Path $sourcePath -ChildP
 $sysprepPath = "C:\Windows\System32\Sysprep\Sysprep.exe"
 
 function Test-InternetConnection {
-    try { Test-Connection -ComputerName "www.google.com" -Count 1 -Quiet } catch { $false }
+    try {
+        Invoke-WebRequest -Uri "http://www.msftconnecttest.com/connecttest.txt" -UseBasicParsing -TimeoutSec 5 > $null
+        return $true
+    } catch {
+        return $false
+    }
 }
 
 function Set-LoadingAnimation {
@@ -66,9 +71,17 @@ function Confirm-Input {
 }
 
 function Get-PcNameFromUser {
-    $newPcName = Read-Host "Enter the new PC name"
-    if (Confirm-Input -Message "Is the new PC name correct? ($newPcName)") { return $newPcName }
-    else { Write-Host "Please re-enter the new PC name." -ForegroundColor Yellow; return Get-PcNameFromUser }
+    $regex = '^[^\\/:*?"<>|]{1,15}$'
+    while ($true) {
+        $newPcName = Read-Host "Enter the new PC name (Max 15 chars, no special chars \/:*?""<>|)"
+        if ($newPcName -match $regex) {
+            if (Confirm-Input -Message "Is the new PC name correct? ($newPcName)") {
+                return $newPcName
+            }
+        } else {
+            Write-Host "Invalid PC name. Please adhere to the naming conventions." -ForegroundColor Red
+        }
+    }
 }
 
 function Get-Locale {
@@ -121,7 +134,7 @@ function Get-Locale {
     while ($true) {
         Write-Host "Please select a language:"
         foreach ($locale in $locales) {
-            Write-Host "$($locale.Number). $($locale.Language)"
+            Write-Host "$($locale.Number). $($locale.Language)" -ForegroundColor Yellow
         }
 
         $selection = Read-Host "Enter the number corresponding to your choice (1-5)"
@@ -141,68 +154,89 @@ function Get-Locale {
 function Install-NinjaAgent {
     param ([string]$Installer)
     if (Confirm-Input -Message "Install NinjaOne Agent?") {
+        if (-not (Test-Path $Installer)) {
+            Write-Host "Installer not found at $Installer" -ForegroundColor Red
+            return
+        }
         try {
             $process = Start-Process "msiexec.exe" -ArgumentList "/i `"$Installer`" /quiet" -NoNewWindow -PassThru
             Set-LoadingAnimation -Message "Installing NinjaOne Agent" -Process $process
             $process.WaitForExit()
-        } catch { Write-Host "Failed to install NinjaOne Agent: $_" -ForegroundColor Red; throw }
-    } else { Write-Host "Skipping NinjaOne Agent installation." -ForegroundColor Yellow }
+        } catch {
+            Write-Host "Failed to install NinjaOne Agent: $_" -ForegroundColor Red
+            throw
+        }
+    } else {
+        Write-Host "Skipping NinjaOne Agent installation." -ForegroundColor Yellow
+    }
 }
 
 function Update-UnattendXml {
     param (
         [string]$PcName,
         [string]$UnattendXmlPath,
-        [hashtable]$Locale
+        [hashtable]$Locale,
+        [string]$NewUnattendXmlPath
     )
     try {
+        # Load the unattend.xml file as XML
         [xml]$xml = Get-Content -Path $UnattendXmlPath -Raw
 
         # Update the ComputerName
-        $shellSetupComponents = $xml.unattend.settings | Where-Object {
-            $_.component.'@name' -eq 'Microsoft-Windows-Shell-Setup'
-        }
-        foreach ($settings in $shellSetupComponents) {
-            foreach ($component in $settings.component) {
-                if ($component.ComputerName) {
-                    $component.ComputerName = $PcName
-                    Write-Host "Updated ComputerName in unattend.xml" -ForegroundColor Green
-                }
+        $computerNameNode = $xml.SelectSingleNode("//component[@name='Microsoft-Windows-Shell-Setup']/ComputerName")
+        if ($computerNameNode) {
+            $computerNameNode.InnerText = $PcName
+            Write-Host "Updated ComputerName in unattend.xml" -ForegroundColor Green
+        } else {
+            # Create the ComputerName node if it doesn't exist
+            $shellSetupComponent = $xml.SelectSingleNode("//component[@name='Microsoft-Windows-Shell-Setup']")
+            if ($shellSetupComponent) {
+                $newElement = $xml.CreateElement("ComputerName")
+                $newElement.InnerText = $PcName
+                $shellSetupComponent.AppendChild($newElement) | Out-Null
+                Write-Host "Added ComputerName to unattend.xml" -ForegroundColor Green
+            } else {
+                Write-Host "Microsoft-Windows-Shell-Setup component not found." -ForegroundColor Red
             }
         }
 
         # Update Locale Settings
-        $intlComponents = $xml.unattend.settings | Where-Object {
-            $_.component.'@name' -eq 'Microsoft-Windows-International-Core'
-        }
-        foreach ($settings in $intlComponents) {
-            foreach ($component in $settings.component) {
-                if ($component.InputLocale -or $component.SystemLocale -or $component.UILanguage -or $component.UserLocale) {
-                    $component.InputLocale = $Locale.InputLocale
-                    $component.SystemLocale = $Locale.SystemLocale
-                    $component.UILanguage = $Locale.UILanguage
-                    $component.UserLocale = $Locale.UserLocale
-                    Write-Host "Updated locale settings in unattend.xml" -ForegroundColor Green
+        $intlComponent = $xml.SelectSingleNode("//component[@name='Microsoft-Windows-International-Core']")
+        if ($intlComponent) {
+            foreach ($localeSetting in 'InputLocale', 'SystemLocale', 'UILanguage', 'UserLocale') {
+                $localeNode = $intlComponent.SelectSingleNode($localeSetting)
+                if ($localeNode) {
+                    $localeNode.InnerText = $Locale.$localeSetting
+                } else {
+                    # Create the locale node if it doesn't exist
+                    $newElement = $xml.CreateElement($localeSetting)
+                    $newElement.InnerText = $Locale.$localeSetting
+                    $intlComponent.AppendChild($newElement) | Out-Null
                 }
             }
+            Write-Host "Updated locale settings in unattend.xml" -ForegroundColor Green
+        } else {
+            Write-Host "Microsoft-Windows-International-Core component not found." -ForegroundColor Red
         }
 
         # Save the updated unattend.xml
-        $xml.Save($newUnattendXML)
-        Write-Host "Updated unattend.xml with new PC name and locale settings!" -ForegroundColor Green
+        $xml.Save($NewUnattendXmlPath)
+        Write-Host "Saved updated unattend.xml to $NewUnattendXmlPath" -ForegroundColor Green
     } catch {
         Write-Host "Failed to update unattend.xml: $_" -ForegroundColor Red
         throw
     }
 }
 
-
 function Start-Sysprep {
     try {
         $process = Start-Process -FilePath $sysprepPath -ArgumentList "/generalize", "/oobe", "/reboot", "/quiet", "/unattend:$newUnattendXML" -WindowStyle Hidden -PassThru
         Set-LoadingAnimation -Message "Running Sysprep. Please be patient, system will reboot automatically" -Process $process
         $process.WaitForExit()
-    } catch { Write-Error "Failed to start Sysprep: $_"; throw }
+    } catch {
+        Write-Error "Failed to start Sysprep: $_"
+        throw
+    }
 }
 
 function Test-AdminPrivileges {
@@ -236,21 +270,21 @@ function Main {
         Install-NinjaAgent -Installer $ninjaInstaller_Online
 
         # Update unattend.xml with the new PC name and locale settings
-        Update-UnattendXml -PcName $pcName -UnattendXmlPath $unattendXML_Online -Locale $locale
+        Update-UnattendXml -PcName $pcName -UnattendXmlPath $unattendXML_Online -Locale $locale -NewUnattendXmlPath $newUnattendXML
     } elseif ($Method -eq "Offline") {
         # Check if offline resources are available
-        if ($unattendXML_Offline -and $ninjaInstaller_Offline) {
+        if ((Test-Path $unattendXML_Offline) -and (Test-Path $ninjaInstaller_Offline)) {
             # Install NinjaOne Agent from local storage
             Install-NinjaAgent -Installer $ninjaInstaller_Offline
 
             # Update unattend.xml with the new PC name and locale settings
-            Update-UnattendXml -PcName $pcName -UnattendXmlPath $unattendXML_Offline -Locale $locale
+            Update-UnattendXml -PcName $pcName -UnattendXmlPath $unattendXML_Offline -Locale $locale -NewUnattendXmlPath $newUnattendXML
         } else {
-            Write-Host "Offline mode not available. No USB drive detected." -ForegroundColor Red
+            Write-Host "Offline mode not available. Offline resources not found." -ForegroundColor Red
             # Fallback to Online mode
             $Method = "Online"
             Install-NinjaAgent -Installer $ninjaInstaller_Online
-            Update-UnattendXml -PcName $pcName -UnattendXmlPath $unattendXML_Online -Locale $locale
+            Update-UnattendXml -PcName $pcName -UnattendXmlPath $unattendXML_Online -Locale $locale -NewUnattendXmlPath $newUnattendXML
         }
     } else {
         Write-Host "Invalid method specified. Please use 'Online' or 'Offline'." -ForegroundColor Red
@@ -261,5 +295,9 @@ function Main {
     Start-Sysprep
 }
 
-
-try { Main } catch { Write-Host "An error occurred during setup: $_" -ForegroundColor Red; throw }
+try {
+    Main
+} catch {
+    Write-Host "An error occurred during setup: $_" -ForegroundColor Red
+    throw
+}
