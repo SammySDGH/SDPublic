@@ -8,7 +8,7 @@
 .NOTES
     Author: Sammy Kastanja
     Date: 09-09-2024
-    Version: 3.8
+    Version: 3.8.1
     Requires: Administrative privileges
 #>
 
@@ -17,7 +17,7 @@ param (
     [string]$Method = ""
 )
 
-$SCRIPT_VERSION = "3.8"
+$SCRIPT_VERSION = "3.8.1"
 $ASCII_LOGO = @"
        _____            _       __   ____             __
       / ___/____  _____(_)___ _/ /  / __ \___  ____ _/ /
@@ -71,6 +71,73 @@ function Get-PcNameFromUser {
     else { Write-Host "Please re-enter the new PC name." -ForegroundColor Yellow; return Get-PcNameFromUser }
 }
 
+function Get-Locale {
+    [CmdletBinding()]
+    param()
+
+    $locales = @(
+        @{
+            Number = 1
+            Language = 'Dutch'
+            InputLocale = '0413:00000413;0409:00000409;0407:00000407'
+            SystemLocale = 'nl-NL'
+            UILanguage = 'nl-NL'
+            UserLocale = 'nl-NL'
+        },
+        @{
+            Number = 2
+            Language = 'English'
+            InputLocale = '0409:00000409;0407:00000407;080c:0000080c'
+            SystemLocale = 'en-US'
+            UILanguage = 'en-US'
+            UserLocale = 'en-US'
+        },
+        @{
+            Number = 3
+            Language = 'German'
+            InputLocale = '0407:00000407;0409:00000409;080c:0000080c'
+            SystemLocale = 'de-DE'
+            UILanguage = 'de-DE'
+            UserLocale = 'de-DE'
+        },
+        @{
+            Number = 4
+            Language = 'Belgian'
+            InputLocale = '080c:0000080c;0409:00000409;0407:00000407'
+            SystemLocale = 'fr-BE'
+            UILanguage = 'fr-BE'
+            UserLocale = 'fr-BE'
+        },
+        @{
+            Number = 5
+            Language = 'French'
+            InputLocale = '040c:0000040c;0409:00000409;0407:00000407'
+            SystemLocale = 'fr-FR'
+            UILanguage = 'fr-FR'
+            UserLocale = 'fr-FR'
+        }
+    )
+
+    while ($true) {
+        Write-Host "Please select a language:"
+        foreach ($locale in $locales) {
+            Write-Host "$($locale.Number). $($locale.Language)"
+        }
+
+        $selection = Read-Host "Enter the number corresponding to your choice (1-5)"
+        if ($selection -match '^[1-5]$') {
+            $selectedLocale = $locales | Where-Object { $_.Number -eq [int]$selection }
+            if ($selectedLocale) {
+                if (Confirm-Input -Message "You have selected $($selectedLocale.Language). Is this correct?") {
+                    return $selectedLocale
+                }
+            }
+        } else {
+            Write-Host "Invalid selection. Please enter a number between 1 and 5." -ForegroundColor Red
+        }
+    }
+}
+
 function Install-NinjaAgent {
     param ([string]$Installer)
     if (Confirm-Input -Message "Install NinjaOne Agent?") {
@@ -83,14 +150,52 @@ function Install-NinjaAgent {
 }
 
 function Update-UnattendXml {
-    param ([string]$PcName, [string]$UnattendXmlPath)
+    param (
+        [string]$PcName,
+        [string]$UnattendXmlPath,
+        [hashtable]$Locale
+    )
     try {
-        $unattendContent = Get-Content -Path $UnattendXmlPath -Raw
-        $updatedUnattendContent = $unattendContent -replace "<ComputerName>PC-SD</ComputerName>", "<ComputerName>$PcName</ComputerName>"
-        Set-Content -Path $newUnattendXML -Value $updatedUnattendContent -Force
-        Write-Host "Updated unattend.xml with new PC name!" -ForegroundColor Green
-    } catch { Write-Host "Failed to update unattend.xml: $_" -ForegroundColor Red; throw }
+        [xml]$xml = Get-Content -Path $UnattendXmlPath -Raw
+
+        # Update the ComputerName
+        $shellSetupComponents = $xml.unattend.settings | Where-Object {
+            $_.component.'@name' -eq 'Microsoft-Windows-Shell-Setup'
+        }
+        foreach ($settings in $shellSetupComponents) {
+            foreach ($component in $settings.component) {
+                if ($component.ComputerName) {
+                    $component.ComputerName = $PcName
+                    Write-Host "Updated ComputerName in unattend.xml" -ForegroundColor Green
+                }
+            }
+        }
+
+        # Update Locale Settings
+        $intlComponents = $xml.unattend.settings | Where-Object {
+            $_.component.'@name' -eq 'Microsoft-Windows-International-Core'
+        }
+        foreach ($settings in $intlComponents) {
+            foreach ($component in $settings.component) {
+                if ($component.InputLocale -or $component.SystemLocale -or $component.UILanguage -or $component.UserLocale) {
+                    $component.InputLocale = $Locale.InputLocale
+                    $component.SystemLocale = $Locale.SystemLocale
+                    $component.UILanguage = $Locale.UILanguage
+                    $component.UserLocale = $Locale.UserLocale
+                    Write-Host "Updated locale settings in unattend.xml" -ForegroundColor Green
+                }
+            }
+        }
+
+        # Save the updated unattend.xml
+        $xml.Save($newUnattendXML)
+        Write-Host "Updated unattend.xml with new PC name and locale settings!" -ForegroundColor Green
+    } catch {
+        Write-Host "Failed to update unattend.xml: $_" -ForegroundColor Red
+        throw
+    }
 }
+
 
 function Start-Sysprep {
     try {
