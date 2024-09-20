@@ -212,25 +212,54 @@ function Test-AdminPrivileges {
 
 function Main {
     Write-Host $ASCII_LOGO -ForegroundColor Cyan
-    if (-not (Test-AdminPrivileges)) { throw "This script requires administrative privileges. Please run as Administrator." }
-    if (-not $Method) { $Method = if (Test-InternetConnection) { "Online" } else { "Offline" } }
+
+    # Check for administrative privileges
+    if (-not (Test-AdminPrivileges)) {
+        throw "This script requires administrative privileges. Please run as Administrator."
+    }
+
+    # Determine the method if not specified
+    if (-not $Method) {
+        $Method = if (Test-InternetConnection) { "Online" } else { "Offline" }
+    }
     Write-Host "Running in $Method mode." -ForegroundColor Green
+
+    # Get the new PC name from the user
     $pcName = Get-PcNameFromUser
+
+    # Get the locale settings from the user
+    $locale = Get-Locale
+
+    # Execute based on the selected method
     if ($Method -eq "Online") {
+        # Install NinjaOne Agent from the network
         Install-NinjaAgent -Installer $ninjaInstaller_Online
-        Update-UnattendXml -PcName $pcName -UnattendXmlPath $unattendXML_Online
+
+        # Update unattend.xml with the new PC name and locale settings
+        Update-UnattendXml -PcName $pcName -UnattendXmlPath $unattendXML_Online -Locale $locale
     } elseif ($Method -eq "Offline") {
+        # Check if offline resources are available
         if ($unattendXML_Offline -and $ninjaInstaller_Offline) {
+            # Install NinjaOne Agent from local storage
             Install-NinjaAgent -Installer $ninjaInstaller_Offline
-            Update-UnattendXml -PcName $pcName -UnattendXmlPath $unattendXML_Offline
+
+            # Update unattend.xml with the new PC name and locale settings
+            Update-UnattendXml -PcName $pcName -UnattendXmlPath $unattendXML_Offline -Locale $locale
         } else {
             Write-Host "Offline mode not available. No USB drive detected." -ForegroundColor Red
+            # Fallback to Online mode
             $Method = "Online"
             Install-NinjaAgent -Installer $ninjaInstaller_Online
-            Update-UnattendXml -PcName $pcName -UnattendXmlPath $unattendXML_Online
+            Update-UnattendXml -PcName $pcName -UnattendXmlPath $unattendXML_Online -Locale $locale
         }
+    } else {
+        Write-Host "Invalid method specified. Please use 'Online' or 'Offline'." -ForegroundColor Red
+        return
     }
+
+    # Start Sysprep with the updated unattend.xml
     Start-Sysprep
 }
+
 
 try { Main } catch { Write-Host "An error occurred during setup: $_" -ForegroundColor Red; throw }
