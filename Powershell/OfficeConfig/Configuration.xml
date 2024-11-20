@@ -1,4 +1,4 @@
-<Configuration ID="32e66bfa-77a2-4732-840f-a143798923e8">
+<Configuration ID="54bc9b46-a5b2-4fa9-bdc2-97c553865e48">
   <Add OfficeClientEdition="64" Channel="Current">
     <Product ID="O365ProPlusEEANoTeamsRetail">
       <Language ID="nl-nl" />
@@ -6,7 +6,6 @@
       <ExcludeApp ID="Groove" />
       <ExcludeApp ID="Lync" />
       <ExcludeApp ID="OneDrive" />
-      <ExcludeApp ID="OneNote" />
       <ExcludeApp ID="Outlook" />
       <ExcludeApp ID="Publisher" />
       <ExcludeApp ID="Bing" />
