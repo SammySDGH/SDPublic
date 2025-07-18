@@ -1,0 +1,11 @@
+.htm, ChromeHTML
+.html, ChromeHTML
+.http, ChromeHTML
+.https, ChromeHMTL
+.pdf, ChromeHTML
+.svg, ChromeHTML
+.webp, ChromeHTML
+.xht, ChromeHTML
+.xhtml, ChromeHTML
+HTTP, ChromeHTML
+HTTPS, ChromeHTML
