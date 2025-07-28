@@ -2,7 +2,7 @@
   "custom-layouts": [
     {
       "uuid": "{B22D6AEE-2D05-4F20-8C0D-574C957613A2}",
-      "name": "49 Inch",
+      "name": "49 inch",
       "type": "grid",
       "info": {
         "rows": 1,
@@ -30,7 +30,7 @@
     
     {
       "uuid": "{0B8780CB-22FC-428F-8C2D-49C4856C720A}",
-      "name": "34 Inch",
+      "name": "34 inch",
       "type": "grid",
       "info": {
         "rows": 1,
