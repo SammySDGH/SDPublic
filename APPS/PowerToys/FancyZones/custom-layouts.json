@@ -1,8 +1,36 @@
 {
   "custom-layouts": [
     {
-      "uuid": "{3CDDE647-51C9-40BD-97E5-58C2306D6C07}",
-      "name": "Stijn2",
+      "uuid": "{B22D6AEE-2D05-4F20-8C0D-574C957613A2}",
+      "name": "49 Inch",
+      "type": "grid",
+      "info": {
+        "rows": 1,
+        "columns": 3,
+        "rows-percentage": [
+          10000
+        ],
+        "columns-percentage": [
+          3038,
+          4950,
+          2012
+        ],
+        "cell-child-map": [
+          [
+            0,
+            1,
+            2
+          ]
+        ],
+        "show-spacing": true,
+        "spacing": 0,
+        "sensitivity-radius": 20
+      }
+    },
+    
+    {
+      "uuid": "{0B8780CB-22FC-428F-8C2D-49C4856C720A}",
+      "name": "34 Inch",
       "type": "grid",
       "info": {
         "rows": 1,
