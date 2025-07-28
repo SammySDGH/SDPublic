@@ -1,5 +1,5 @@
 {
-    "startup":true,
+    "startup":false,
     "enabled":{
         "AdvancedPaste":false,
         "AlwaysOnTop":true,
