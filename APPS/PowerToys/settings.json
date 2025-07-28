@@ -42,7 +42,7 @@
         "enable_experimentation":false,
         "is_admin":false,
         "enable_warnings_elevated_apps":false,
-        "theme":"dark",
+        "theme":"system",
         "system_theme":"dark",
 
     "powertoys_version":"v0.92.1"
